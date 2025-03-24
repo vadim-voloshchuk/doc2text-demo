@@ -1,0 +1,6 @@
+*.pyc
+
+.gradio/
+d2t/
+data_test/
+cookies/

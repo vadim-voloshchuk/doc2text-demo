@@ -1,0 +1,12 @@
+Flask
+shiftlab_ocr
+gradio
+hugchat
+textract
+python-magic
+pytest
+matplotlib
+numpy
+seaborn
+pdf2image
+markdown2
