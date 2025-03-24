@@ -104,7 +104,7 @@ with gr.Blocks() as demo:
     submit_button.click(lambda: gr.update(interactive=True), None, submit_button, queue=False)
 
 if __name__ == "__main__":
-    demo.queue(concurrency_count=1).launch(
+    demo.queue().launch(
         server_name="0.0.0.0",
         server_port=7860,
         show_api=False,
