@@ -1,16 +1,25 @@
-FROM python:3.9-slim
+FROM python:3.10
 
 WORKDIR /app
+
+# Устанавливаем системные зависимости для OpenCV, libmagic и других компонентов
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    libmagic1 \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Копируем файлы проекта
 COPY . /app
 
-# Устанавливаем зависимости
+# Устанавливаем Python-зависимости
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
-# Gradio использует порт 7860 по умолчанию
 EXPOSE 7860
 
-# Запускаем Gradio-демо
 CMD ["python", "-m", "app.gradio_app"]
