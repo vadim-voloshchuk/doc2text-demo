@@ -18,3 +18,4 @@ torchaudio
 sentencepiece  # обязательно!
 transliterate
 python-doctr[torch,viz]
+easyocr

@@ -38,6 +38,10 @@ def parse_analysis(result):
         json_text = json_part.split("```")[0].strip()
         base_data = json.loads(json_text)
 
+        keywords = base_data.get('keywords', [])
+        if not isinstance(keywords, list):
+            keywords = [str(keywords)] if keywords else []
+
         md_final += f"### 🗒️ Комментарий базового анализа:\n\n{comment.strip()}\n\n"
         md_final += "### 📋 Основные поля документа:\n"
         md_final += (
@@ -46,7 +50,7 @@ def parse_analysis(result):
             f"- **Автор:** {base_data.get('author', '—')}\n"
             f"- **Дата:** {base_data.get('date', '—')}\n"
             f"- **Краткое описание:** {base_data.get('summary', '—')}\n"
-            f"- **Ключевые слова:** {', '.join(base_data.get('keywords', []))}\n"
+            f"- **Ключевые слова:** {', '.join(keywords)}\n"
             f"- **Полный текст:** {base_data.get('full_text', '—')}\n"
         )
     else:
@@ -58,26 +62,36 @@ def parse_analysis(result):
 
     return md_final
 
+
 # Обработка документа
 def process_document(file):
     if file is None:
-        return "**Ошибка:** Файл не загружен."
+        return "**Ошибка:** Файл не загружен.", None, "", "", "", ""
 
     mime_type = file_handler.get_mime_type(file)
+    normalized_path = None
 
-    if mime_type.startswith("image/"):
-        file = preprocessor.normalize_image(file)
+    normalized_path = preprocessor.normalize_file(file)
+    
+    image_paths = normalized_path
 
-    extracted_text = ocr.extract_text(file, mime_type)
+    extracted_text, ocr_info = ocr.extract_text_from_pages(image_paths)
     if not extracted_text:
-        return "**Ошибка:** Не удалось извлечь текст."
+        return "**Ошибка:** Не удалось извлечь текст.", normalized_path, "", "", "", ""
 
     result = analyzer.process_document_pipeline(extracted_text)
     formatted_result = parse_analysis(result)
 
-    return formatted_result
+    return (
+        formatted_result,
+        normalized_path,
+        ocr_info.get("docTR", ""),
+        ocr_info.get("easyocr", ""),
+        ocr_info.get("shiftlab", ""),
+        ocr_info.get("visual", "")
+    )
 
-# Gradio интерфейс с инструкцией, примерами, предпросмотром и прелоудером
+# Gradio интерфейс
 with gr.Blocks() as demo:
     gr.Markdown("""
     # 📑 Doc2Text LLM Service
@@ -88,7 +102,13 @@ with gr.Blocks() as demo:
 
     file_input = gr.File(label="📂 Загрузите документ")
     image_preview = gr.Image(label="🖼️ Предпросмотр документа")
+    processed_preview = gr.Gallery(label="🧪 Обработанные изображения")
     output_md = gr.Markdown(label="📝 Результаты анализа")
+    
+    output_doctr = gr.Textbox(label="📄 docTR результат", lines=6)
+    output_easyocr = gr.Textbox(label="📄 EasyOCR результат", lines=6)
+    output_shiftlab = gr.Textbox(label="📄 Shiftlab OCR результат", lines=6)
+    output_visual = gr.HTML(label="🎨 Визуализация OCR")
 
     submit_button = gr.Button("🔍 Анализировать")
 
@@ -102,12 +122,30 @@ with gr.Blocks() as demo:
         label="🖼️ Примеры документов"
     )
 
-    file_input.change(lambda file: file.name if file else None, inputs=file_input, outputs=image_preview)
+    file_input.change(
+        fn=lambda file: (file.name if file else None, None, "", "", "", ""),
+        inputs=file_input,
+        outputs=[
+            image_preview,
+            processed_preview,
+            output_doctr,
+            output_easyocr,
+            output_shiftlab,
+            output_visual
+        ]
+    )
 
     submit_button.click(
         fn=process_document,
         inputs=file_input,
-        outputs=output_md,
+        outputs=[
+            output_md,
+            processed_preview,
+            output_doctr,
+            output_easyocr,
+            output_shiftlab,
+            output_visual
+        ],
         api_name="process_document"
     )
 
