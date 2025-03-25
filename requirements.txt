@@ -1,5 +1,7 @@
 Flask
 shiftlab_ocr
+paddleocr
+paddlepaddle==2.5.1 -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html
 gradio
 hugchat
 textract
@@ -10,3 +12,9 @@ numpy
 seaborn
 pdf2image
 markdown2
+transformers
+torchvision
+torchaudio
+sentencepiece  # обязательно!
+transliterate
+python-doctr[torch,viz]

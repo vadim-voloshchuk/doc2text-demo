@@ -1,8 +1,12 @@
 import logging
 import os
-from shiftlab_ocr.doc2text.reader import Reader
 from pdf2image import convert_from_path
 
+from doctr.models import ocr_predictor
+from doctr.io import DocumentFile
+from shiftlab_ocr.doc2text.reader import Reader
+
+# Настройка логирования
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 handler = logging.StreamHandler()
@@ -10,33 +14,33 @@ formatter = logging.Formatter('[%(asctime)s] %(levelname)s in %(module)s: %(mess
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
+# Инициализация моделей
+doctr_model = ocr_predictor(det_arch='db_resnet50', reco_arch='crnn_vgg16_bn', pretrained=True)
+
 def extract_text(file_obj, mime_type):
     """
-    Извлекает текст из файла с использованием shiftlab_ocr.
-    Если MIME-тип указывает на PDF, конвертирует первую страницу PDF в изображение.
-    Если текст не извлечён (пустой результат), возвращает None.
+    Извлекает текст из документа с использованием и shiftlab_ocr, и docTR.
+    Приоритет отдаётся обоим, объединяя результат, если возможно.
     """
-    logger.info("Начало извлечения текста с использованием shiftlab_ocr. MIME-тип: %s", mime_type)
-    
-    # Определяем временный путь и расширение
+
+    shiftlab_reader = Reader()
+
+    logger.info("Старт обработки файла. MIME-тип: %s", mime_type)
+
+    # Подготовка временного пути
     temp_path = '/tmp/temp_document'
     try:
-        if hasattr(file_obj, 'name'):
-            ext = os.path.splitext(file_obj.name)[1]
-        else:
-            ext = ''
+        ext = os.path.splitext(file_obj.name)[1] if hasattr(file_obj, 'name') else ''
     except Exception as e:
         logger.exception("Ошибка при определении расширения: %s", e)
         ext = ''
-    
-    # Если PDF, установим расширение .pdf
     if mime_type == "application/pdf":
         ext = ".pdf"
     elif not ext:
         ext = ".png"
     temp_path += ext
 
-    # Получаем данные из file_obj: если есть метод read, используем его, иначе предполагаем, что это путь
+    # Чтение файла
     try:
         if hasattr(file_obj, "read"):
             data = file_obj.read()
@@ -50,7 +54,7 @@ def extract_text(file_obj, mime_type):
         logger.exception("Ошибка при чтении данных: %s", e)
         return None
 
-    # Сохраняем данные во временный файл
+    # Сохраняем файл
     try:
         with open(temp_path, 'wb') as f:
             f.write(data)
@@ -58,7 +62,7 @@ def extract_text(file_obj, mime_type):
         logger.exception("Ошибка при сохранении файла: %s", e)
         return None
 
-    # Если PDF, конвертируем первую страницу в изображение
+    # Если PDF — конвертируем в PNG
     if mime_type == "application/pdf":
         try:
             pages = convert_from_path(temp_path, dpi=300)
@@ -66,25 +70,59 @@ def extract_text(file_obj, mime_type):
                 image = pages[0]
                 temp_image_path = '/tmp/temp_document.png'
                 image.save(temp_image_path, 'PNG')
-                logger.info("PDF успешно конвертирован в изображение.")
+                logger.info("PDF конвертирован в PNG.")
                 temp_path = temp_image_path
             else:
-                logger.error("Не удалось конвертировать PDF в изображение.")
+                logger.error("Не удалось конвертировать PDF.")
                 return None
         except Exception as e:
-            logger.exception("Ошибка при конвертации PDF в изображение: %s", e)
+            logger.exception("Ошибка при конвертации PDF в PNG: %s", e)
             return None
 
-    # Используем shiftlab_ocr для извлечения текста из изображения
+    # === Распознавание через docTR ===
+    doctr_text = None
     try:
-        reader = Reader()
-        result = reader.doc2text(temp_path)
-        if result and result[0].strip():
-            logger.info("shiftlab_ocr успешно извлек текст.")
-            return result[0]
+        doc = DocumentFile.from_images(temp_path)
+        result = doctr_model(doc)
+        json_output = result.export()
+
+        lines = []
+        for page in json_output['pages']:
+            for block in page['blocks']:
+                for line in block['lines']:
+                    text = " ".join([w['value'] for w in line['words']])
+                    lines.append(text)
+
+        if lines:
+            doctr_text = "\n".join(lines)
+            logger.info("docTR успешно извлёк текст.")
         else:
-            logger.error("shiftlab_ocr не смог извлечь текст: пустой результат.")
-            return None
+            logger.warning("docTR не извлёк текст.")
     except Exception as e:
-        logger.exception("Ошибка при выполнении shiftlab_ocr: %s", e)
+        logger.exception("Ошибка docTR: %s", e)
+
+    # === Распознавание через shiftlab_ocr ===
+    shiftlab_text = None
+    try:
+        result = shiftlab_reader.doc2text(temp_path)
+        if result and result[0].strip():
+            shiftlab_text = result[0]
+            logger.info("shiftlab_ocr успешно извлёк текст.")
+        else:
+            logger.warning("shiftlab_ocr не извлёк текст.")
+    except Exception as e:
+        logger.exception("Ошибка shiftlab_ocr: %s", e)
+
+    # === Финальный результат ===
+    if doctr_text and shiftlab_text:
+        logger.info("Объединённый результат из двух OCR-движков.")
+        return doctr_text + "\n\n---\n\n" + shiftlab_text
+    elif doctr_text:
+        logger.info("Возвращён результат только от docTR.")
+        return doctr_text
+    elif shiftlab_text:
+        logger.info("Возвращён результат только от shiftlab_ocr.")
+        return shiftlab_text
+    else:
+        logger.error("Ни один OCR-движок не извлёк текст.")
         return None

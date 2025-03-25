@@ -3,17 +3,20 @@ import os
 import json
 import logging
 import gradio as gr
-from app.services import file_handler, preprocessor, ocr, analyzer
 
-# Патч torch.load
+# Патч для weights_only=False
 _original_torch_load = torch.load
 def _patched_torch_load(*args, **kwargs):
     kwargs['weights_only'] = False
     return _original_torch_load(*args, **kwargs)
 torch.load = _patched_torch_load
 
+# Разрешаем pickle загрузку YOLO-модели
 from shiftlab_ocr.doc2text.yolov5.models.yolo import Model
 torch.serialization.add_safe_globals([Model])
+
+from app.services import file_handler, preprocessor, ocr, analyzer
+
 
 # Логирование
 logger = logging.getLogger("document_pipeline")
