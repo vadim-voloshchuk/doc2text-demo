@@ -17,7 +17,6 @@ torch.serialization.add_safe_globals([Model])
 
 from app.services import file_handler, preprocessor, ocr, analyzer
 
-
 # Логирование
 logger = logging.getLogger("document_pipeline")
 logger.setLevel(logging.DEBUG)
@@ -34,7 +33,6 @@ def parse_analysis(result):
 
     md_final = ""
 
-    # Вытаскиваем комментарий и JSON из base_analysis
     if "```json" in base_md:
         comment, json_part = base_md.split("```json")
         json_text = json_part.split("```")[0].strip()
@@ -54,7 +52,6 @@ def parse_analysis(result):
     else:
         md_final += base_md
 
-    # Красивый вывод detailed_analysis
     md_final += "\n---\n"
     md_final += "### 🔍 Детальный анализ документа:\n\n"
     md_final += detail_md
@@ -80,22 +77,33 @@ def process_document(file):
 
     return formatted_result
 
-# Gradio интерфейс с инструкцией и прелоудером
+# Gradio интерфейс с инструкцией, примерами, предпросмотром и прелоудером
 with gr.Blocks() as demo:
     gr.Markdown("""
     # 📑 Doc2Text LLM Service
-    
-    Загрузите ваш документ (**PDF или изображение**).  
+
+    Загрузите ваш документ (**PDF или изображение**).
     Обработка и анализ займут несколько минут. Пожалуйста, не закрывайте страницу.
     """)
 
     file_input = gr.File(label="📂 Загрузите документ")
-
+    image_preview = gr.Image(label="🖼️ Предпросмотр документа")
     output_md = gr.Markdown(label="📝 Результаты анализа")
 
     submit_button = gr.Button("🔍 Анализировать")
 
-    # Добавлен красивый прелоудер
+    gr.Examples(
+        examples=[
+            "examples/e0bfc9da78d759e5174d70d32737d9c0.jpg",
+            "examples/snils_-obrazec.jpg",
+            "examples/vneshniy-vid-voditelskih-prav.jpg"
+        ],
+        inputs=file_input,
+        label="🖼️ Примеры документов"
+    )
+
+    file_input.change(lambda file: file.name if file else None, inputs=file_input, outputs=image_preview)
+
     submit_button.click(
         fn=process_document,
         inputs=file_input,
