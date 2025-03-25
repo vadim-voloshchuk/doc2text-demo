@@ -2,7 +2,7 @@ FROM python:3.10
 
 WORKDIR /app
 
-# Устанавливаем системные зависимости для OpenCV, libmagic и других компонентов
+# Устанавливаем системные зависимости для OpenCV, libmagic, poppler и других компонентов
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     libmagic1 \
@@ -11,6 +11,7 @@ RUN apt-get update && \
     libsm6 \
     libxext6 \
     libxrender1 \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Копируем файлы проекта
